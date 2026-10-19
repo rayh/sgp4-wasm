@@ -1,0 +1,20 @@
+[package]
+name = "sgp4-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "SGP4/SDP4 satellite propagator compiled to WebAssembly"
+license = "MIT"
+repository = "https://github.com/rayhilton/sgp4-wasm"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+sgp4 = "2.4"
+wasm-bindgen = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+
+[profile.release]
+opt-level = "s"
+lto = true
