@@ -797,14 +797,15 @@ function updateSimulation() {
     // Time display
     const disp = document.getElementById('time-display');
     if (isLive()) {
-        disp.textContent = 'LIVE ' + simDate.toISOString().slice(11, 23) + 'Z';
+        // YYYY-MM-DD HH:MM:SS — date included, seconds tick
+        disp.textContent = 'LIVE ' + simDate.toISOString().slice(0, 19).replace('T', ' ') + 'Z';
         disp.classList.remove('scrubbed');
     } else {
         const offMin = scrubOffsetMs / 60000;
         const sign = offMin >= 0 ? '+' : '−';
         const abs = Math.abs(offMin);
         const h = Math.floor(abs / 60), m = Math.round(abs % 60);
-        disp.textContent = `${sign}${h ? h + 'h ' : ''}${m}m · ${simDate.toISOString().slice(11, 19)}Z`;
+        disp.textContent = `${sign}${h ? h + 'h ' : ''}${m}m · ${simDate.toISOString().slice(0, 19).replace('T', ' ')}Z`;
         disp.classList.add('scrubbed');
     }
 
