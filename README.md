@@ -5,7 +5,7 @@ Satellite orbit propagation in the browser. A WebAssembly build of
 analytic propagator for Two-Line Element (TLE) sets — with a clean JavaScript API
 and a live 3D catalog demo.
 
-**[Try the live demo](https://rayh.github.io/sgp4-wasm/demo/)** — every dot is a
+**[Try the live demo](https://rayh.github.io/sgp4-wasm/)** — every dot is a
 live SGP4 propagation running in your browser.
 
 The propagator wraps the well-tested Rust
@@ -66,7 +66,7 @@ sat.free();
 ## Demo
 
 **Hosted on GitHub Pages** — pushed automatically by CI on every change to
-`main`: https://rayh.github.io/sgp4-wasm/demo/
+`main`: https://rayh.github.io/sgp4-wasm/
 
 The demo shows the current satellite catalog (~15–20k objects from a bundled
 Celestrak snapshot, refreshed by CI) as a field of darts oriented along their

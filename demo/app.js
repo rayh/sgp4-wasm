@@ -51,14 +51,14 @@ let tipPositions = null;    // dart tip positions (for picking), n*3
 let triPositions = null;    // dart vertices, n*36 (4 faces x 3 verts x 3 floats)
 let triColors = null;       // dart vertex colors, n*36
 let highlightIndex = -1;    // cloud index of the selected object's dart
+let selMesh = null;         // solid yellow dart for the selection
+let selGeom = null;
 const TRAIL_MIN = 2.0;      // minutes of arc history per object
-const TRI_SIZE = 0.028;     // dart world size
+const TRI_SIZE = 0.007;     // dart world size
 // Muted dart color + selected yellow, converted to linear space once
 // (three r152+ treats vertex colors as linear and converts to sRGB on output)
 const _baseColor = new THREE.Color(0x4fc3f7).convertSRGBToLinear();
-const _selColor = new THREE.Color(0xffff33).convertSRGBToLinear();
 const BASE_DART_R = _baseColor.r, BASE_DART_G = _baseColor.g, BASE_DART_B = _baseColor.b;
-const SEL_DART_R = _selColor.r, SEL_DART_G = _selColor.g, SEL_DART_B = _selColor.b;
 
 // 3D scene
 let scene, camera, renderer, controls;
@@ -259,6 +259,17 @@ async function loadCatalog() {
         cloud.frustumCulled = false;
         scene.add(cloud);
 
+        // Solid overlay holding only the selected dart (rebuilt on selection)
+        selGeom = new THREE.BufferGeometry();
+        selGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(36), 3));
+        selGeom.computeVertexNormals();
+        selMesh = new THREE.Mesh(selGeom, new THREE.MeshBasicMaterial({
+            color: 0xffff33, side: THREE.DoubleSide, depthWrite: true,
+        }));
+        selMesh.visible = false;
+        selMesh.frustumCulled = false;
+        scene.add(selMesh);
+
         propagateSnapshot();
         const regimes = countRegimes();
         document.getElementById('catalog-info').textContent =
@@ -343,6 +354,21 @@ function propagateSnapshot() {
     cloud.geometry.attributes.position.needsUpdate = true;
     cloud.geometry.attributes.color.needsUpdate = true;
     cloud.geometry.computeVertexNormals();
+    // keep the solid selected dart glued to its dart position (scaled 3x)
+    if (highlightIndex >= 0 && selGeom && selMesh.visible) {
+        const o = highlightIndex * 36;
+        const cx = cloudPositions[highlightIndex * 3];
+        const cy = cloudPositions[highlightIndex * 3 + 1];
+        const cz = cloudPositions[highlightIndex * 3 + 2];
+        const pos = selGeom.attributes.position.array;
+        for (let k = 0; k < 12; k++) {
+            pos[k * 3] = cx + (triPositions[o + k * 3] - cx) * 3;
+            pos[k * 3 + 1] = cy + (triPositions[o + k * 3 + 1] - cy) * 3;
+            pos[k * 3 + 2] = cz + (triPositions[o + k * 3 + 2] - cz) * 3;
+        }
+        selGeom.attributes.position.needsUpdate = true;
+        selGeom.computeVertexNormals();
+    }
     applyHighlight();
 }
 
@@ -361,25 +387,28 @@ function countRegimes() {
 
 function applyHighlight() {
     if (!cloud || !catalog || !triColors) return;
-    const colAttr = cloud.geometry.attributes.color;
-    // restore previously selected dart to the muted base color
-    if (highlightIndex >= 0) {
-        for (let k = 0; k < 12; k++) {
-            colAttr.array[highlightIndex * 36 + k * 3] = BASE_DART_R;
-            colAttr.array[highlightIndex * 36 + k * 3 + 1] = BASE_DART_G;
-            colAttr.array[highlightIndex * 36 + k * 3 + 2] = BASE_DART_B;
+    highlightIndex = selectedObject?.noradId != null
+        ? (idToIndex.get(Number(selectedObject.noradId)) ?? -1) : -1;
+    // Solid yellow dart tracks the selection inside the wireframe field
+    if (selMesh && selGeom) {
+        if (highlightIndex >= 0) {
+            // Selected dart: scaled 3x around its centroid
+            const o = highlightIndex * 36;
+            const cx = cloudPositions[highlightIndex * 3];
+            const cy = cloudPositions[highlightIndex * 3 + 1];
+            const cz = cloudPositions[highlightIndex * 3 + 2];
+            const pos = selGeom.attributes.position.array;
+            for (let k = 0; k < 12; k++) {
+                pos[k * 3] = cx + (triPositions[o + k * 3] - cx) * 3;
+                pos[k * 3 + 1] = cy + (triPositions[o + k * 3 + 1] - cy) * 3;
+                pos[k * 3 + 2] = cz + (triPositions[o + k * 3 + 2] - cz) * 3;
+            }
+            selGeom.attributes.position.needsUpdate = true;
+            selGeom.computeVertexNormals();
+            selMesh.visible = true;
+        } else {
+            selMesh.visible = false;
         }
-    }
-    highlightIndex = -1;
-    const sel = selectedObject?.noradId != null ? idToIndex.get(Number(selectedObject.noradId)) : -1;
-    if (sel >= 0) {
-        highlightIndex = sel;
-        for (let k = 0; k < 12; k++) {
-            colAttr.array[sel * 36 + k * 3] = SEL_DART_R;
-            colAttr.array[sel * 36 + k * 3 + 1] = SEL_DART_G;
-            colAttr.array[sel * 36 + k * 3 + 2] = SEL_DART_B;
-        }
-        colAttr.needsUpdate = true;
     }
 }
 
