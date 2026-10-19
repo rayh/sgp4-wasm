@@ -3,7 +3,10 @@
 Satellite orbit propagation in the browser. A WebAssembly build of
 [SGP4/SDP4](https://celestrak.org/NORAD/documentation/gp4-prop.php) — the standard
 analytic propagator for Two-Line Element (TLE) sets — with a clean JavaScript API
-and a 3D earth-moon demo.
+and a live 3D catalog demo.
+
+**[Try the live demo](https://rayh.github.io/sgp4-wasm/demo/)** — every dot is a
+live SGP4 propagation running in your browser.
 
 The propagator wraps the well-tested Rust
 [`sgp4`](https://crates.io/crates/sgp4) crate (ported from the reference Celestrak
@@ -62,19 +65,29 @@ sat.free();
 
 ## Demo
 
+**Hosted on GitHub Pages** — pushed automatically by CI on every change to
+`main`: https://rayh.github.io/sgp4-wasm/demo/
+
+The demo shows the current satellite catalog (~15–20k objects from a bundled
+Celestrak snapshot, refreshed by CI) as a field of darts oriented along their
+direction of travel, all propagated live in WebAssembly several times a second:
+
+- **Click any dart** to select it — highlights it, propagates the full orbit,
+  and shows details plus a ground track over a world map
+- **Search the catalog** by name, pick from well-known objects, or paste any
+  TLE (works fully offline)
+- **Time is always live** (real time) — scrub ±24 h with the slider, snap back
+  with the LIVE button
+- The Moon follows a real Meeus lunar ephemeris and the Earth's day/night
+  terminator tracks the actual sun position
+
+To run it locally:
+
 ```bash
+wasm-pack build --target web --release
 python3 -m http.server 8080
 # Open http://localhost:8080/demo/
 ```
-
-The demo fetches a current TLE for well-known objects from
-[Celestrak](https://celestrak.org), searches
-[ESA DISCOSweb](https://discosweb.esoc.esa.int) by name (optional — put your API
-key in `demo/config.local.js` as `export const CONFIG = { DISCOS_API_KEY: "..." }`),
-or accepts a pasted TLE (works fully offline). It propagates the orbit with the
-WASM build and plots it in a 3D earth-moon system with reference indicators for
-LEO, the GPS constellation and the GEO belt, a ground track, and a real lunar
-ephemeris. Time can be scrubbed or played at 60x.
 
 ## API
 
@@ -87,6 +100,11 @@ ephemeris. Time can be scrubbed or played at 60x.
 | `sat.getEpoch()` | | ISO 8601 epoch from the TLE |
 | `sat.getNoradId()` | | NORAD catalog number |
 | `sat.getObjectName()` | | Name (only available from 3LE) |
+| `new Catalog(text)` | `Catalog::new` | Parse a multi-TLE catalog |
+| `catalog.count()` | | Number of objects |
+| `catalog.getIds()` | | NORAD IDs as a `Uint32Array` |
+| `catalog.propagateAll(unixMs)` | | All objects to one time; flat `[x,y,z,...]` |
+| `catalog.propagateAllWithTrail(unixMs, trailMin)` | | As above, plus a trailing sample per object |
 | `sat.free()` | | Release WASM memory |
 
 ## Tests

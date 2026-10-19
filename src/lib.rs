@@ -322,3 +322,121 @@ mod tests {
         lat.cos()
     }
 }
+
+/// Bulk catalog propagator: parse a multi-TLE catalog once, propagate all
+/// objects to a common time, and return flat position arrays for rendering.
+#[wasm_bindgen]
+pub struct Catalog {
+    constants: Vec<sgp4::Constants>,
+    epochs: Vec<f64>, // minutes-since-unix-epoch of each TLE epoch
+    ids: Vec<u32>,
+}
+
+#[wasm_bindgen]
+impl Catalog {
+    /// Parse a catalog of 3-line TLE records ("NAME\nLINE1\nLINE2\n...").
+    #[wasm_bindgen(constructor)]
+    pub fn new(text: &str) -> Result<Catalog, JsError> {
+        let mut constants = Vec::new();
+        let mut epochs = Vec::new();
+        let mut ids = Vec::new();
+
+        let elements_vec = sgp4::parse_3les(text)
+            .map_err(|e| JsError::new(&format!("catalog parse error: {:?}", e)))?;
+
+        for elements in elements_vec {
+            let c = sgp4::Constants::from_elements(&elements)
+                .map_err(|e| JsError::new(&format!("SGP4 init error for {}: {:?}", elements.norad_id, e)))?;
+            // Epoch as minutes since Unix epoch (1970-01-01T00:00:00Z)
+            let epoch_minutes = (elements.datetime.timestamp_millis() as f64) / 60000.0;
+            ids.push(elements.norad_id as u32);
+            epochs.push(epoch_minutes);
+            constants.push(c);
+        }
+
+        Ok(Catalog { constants, epochs, ids })
+    }
+
+    /// Number of objects.
+    #[wasm_bindgen(js_name = "count")]
+    pub fn count(&self) -> usize {
+        self.constants.len()
+    }
+
+    /// NORAD IDs, flat u32 array.
+    #[wasm_bindgen(js_name = "getIds")]
+    pub fn get_ids(&self) -> Vec<u32> {
+        self.ids.clone()
+    }
+
+    /// Propagate all objects to an absolute time (milliseconds since Unix epoch).
+    /// Returns flat [x0,y0,z0, x1,y1,z1, ...] ECI positions in km.
+    #[wasm_bindgen(js_name = "propagateAll")]
+    pub fn propagate_all(&self, unix_ms: f64) -> Result<Vec<f64>, JsError> {
+        let target_minutes = unix_ms / 60000.0;
+        let mut out = Vec::with_capacity(self.constants.len() * 3);
+        for (c, epoch) in self.constants.iter().zip(self.epochs.iter()) {
+            let minutes = target_minutes - epoch;
+            match c.propagate(sgp4::MinutesSinceEpoch(minutes)) {
+                Ok(p) => {
+                    out.push(p.position[0]);
+                    out.push(p.position[1]);
+                    out.push(p.position[2]);
+                }
+                Err(_) => {
+                    // Degenerate/unpropagatable element set: park far away, out of view
+                    out.push(0.0);
+                    out.push(0.0);
+                    out.push(1e9);
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Propagate all objects to a time and also return positions TRAIL_MINUTES ago,
+    /// giving a short arc segment per object (direction of travel at a glance).
+    /// Returns flat [x0,y0,z0, tx0,ty0,tz0, x1,...] where t* is the trailing sample.
+    #[wasm_bindgen(js_name = "propagateAllWithTrail")]
+    pub fn propagate_all_with_trail(
+        &self,
+        unix_ms: f64,
+        trail_minutes: f64,
+    ) -> Result<Vec<f64>, JsError> {
+        let target_minutes = unix_ms / 60000.0;
+        let trail_minutes = target_minutes - trail_minutes;
+        let n = self.constants.len();
+        let mut out = Vec::with_capacity(n * 6);
+        for (c, epoch) in self.constants.iter().zip(self.epochs.iter()) {
+            let minutes = target_minutes - epoch;
+            match c.propagate(sgp4::MinutesSinceEpoch(minutes)) {
+                Ok(p) => {
+                    out.push(p.position[0]);
+                    out.push(p.position[1]);
+                    out.push(p.position[2]);
+                    // Trailing sample; fall back to the current position if it fails
+                    match c.propagate(sgp4::MinutesSinceEpoch(trail_minutes - epoch)) {
+                        Ok(tp) => {
+                            out.push(tp.position[0]);
+                            out.push(tp.position[1]);
+                            out.push(tp.position[2]);
+                        }
+                        Err(_) => {
+                            out.push(p.position[0]);
+                            out.push(p.position[1]);
+                            out.push(p.position[2]);
+                        }
+                    }
+                }
+                Err(_) => {
+                    for _ in 0..6 {
+                        out.push(0.0);
+                        out.push(0.0);
+                        out.push(1e9);
+                    }
+                }
+            }
+        }
+        Ok(out)
+    }
+}

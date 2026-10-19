@@ -1,0 +1,61 @@
+name: Deploy demo to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 5 * * *" # daily catalog refresh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - run: cargo install wasm-pack
+      - run: wasm-pack build --target web --release
+      # Fresh catalog snapshot: full active catalog (~16k) plus major debris fields.
+      # Falls back to the committed snapshot if Celestrak rate-limits the runner.
+      - name: Fetch catalog snapshot
+        run: |
+          fetch() {
+            curl -sf "https://celestrak.org/NORAD/elements/gp.php?GROUP=$1&FORMAT=tle" \
+              -A "sgp4-wasm-demo/0.1 (github-actions; contact: ray@wirestorm.net)" -o "$2"
+          }
+          ok=1
+          fetch active /tmp/active.tle || ok=0
+          fetch fengyun-1c-debris /tmp/fengyun.tle || true
+          fetch iridium-33-debris /tmp/iridium33.tle || true
+          fetch cosmos-2251-debris /tmp/cosmos2251.tle || true
+          if [ "$ok" = "1" ] && [ -s /tmp/active.tle ]; then
+            cat /tmp/active.tle /tmp/fengyun.tle /tmp/iridium33.tle /tmp/cosmos2251.tle > demo/catalog.tle
+            echo "fetched fresh catalog + debris"
+          else
+            echo "celestrak unavailable/rate-limited — using committed snapshot"
+          fi
+      - name: Stage site
+        run: |
+          mkdir -p site/pkg
+          cp -r demo/* site/
+          cp pkg/* site/pkg/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
