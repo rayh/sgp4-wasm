@@ -50,9 +50,13 @@ jobs:
           fi
       - name: Stage site
         run: |
-          mkdir -p site/pkg
-          cp -r demo/* site/
+          mkdir -p site/demo site/pkg
+          cp -r demo/* site/demo/
           cp pkg/* site/pkg/
+          # Root lands on the demo
+          cat > site/index.html <<'HTML'
+          <!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; url=demo/"></head></html>
+          HTML
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
