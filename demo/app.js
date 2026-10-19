@@ -722,35 +722,42 @@ function refreshDetail(force = false) {
     if (!force && now - lastDetailRefresh < 1000) return;
     lastDetailRefresh = now;
 
-    // Period from a vis-viva snapshot if not known yet
-    if (!periodMin) {
-        const p0 = satellite.propagate(0);
-        const r0 = Math.hypot(...p0.position_eci);
-        const v0 = p0.speed_km_s;
-        const sma = 1 / (2 / r0 - (v0 * v0) / MU);
-        periodMin = 2 * Math.PI * Math.sqrt(sma * sma * sma / MU) / 60;
-    }
+    try {
+        // Period from a vis-viva snapshot if not known yet
+        if (!periodMin) {
+            const p0 = satellite.propagate(0);
+            const r0 = Math.hypot(...p0.position_eci);
+            const v0 = p0.speed_km_s;
+            const sma = 1 / (2 / r0 - (v0 * v0) / MU);
+            periodMin = 2 * Math.PI * Math.sqrt(sma * sma * sma / MU) / 60;
+        }
 
-    const epochMs = epochDate.getTime();
-    const centerMin = (simTimeMs() - epochMs) / 60000;
-    const backMin = periodMin / 2;
-    const fwdMin = periodMin * 1.5;
-    const spanMin = backMin + fwdMin;
-    const stepMin = Math.max(spanMin / 480, 0.1);
+        const epochMs = epochDate.getTime();
+        const centerMin = (simTimeMs() - epochMs) / 60000;
+        const backMin = periodMin / 2;
+        const fwdMin = periodMin * 1.5;
+        const spanMin = backMin + fwdMin;
+        const stepMin = Math.max(spanMin / 480, 0.1);
 
-    const t0 = performance.now();
-    const batch = satellite.propagateBatch(centerMin - backMin, centerMin + fwdMin, stepMin);
-    const elapsed = (performance.now() - t0).toFixed(1);
+        const t0 = performance.now();
+        const batch = satellite.propagateBatch(centerMin - backMin, centerMin + fwdMin, stepMin);
+        const elapsed = (performance.now() - t0).toFixed(1);
 
-    detailResults = batch.results;
-    detailCenterMin = centerMin;
-    detailSpanMin = spanMin;
+        detailResults = batch.results;
+        detailCenterMin = centerMin;
+        detailSpanMin = spanMin;
 
-    drawOrbit(force);
-    drawGroundTrack();
+        drawOrbit(force);
+        drawGroundTrack();
 
-    if (force) {
-        updateSelectedInfo();
+        if (force) {
+            updateSelectedInfo();
+            updateStatus(
+                `<span class="hl">${selectedObject.name}</span> — SGP4 live · ${batch.results.length} orbit pts @ ${elapsed} ms`
+            );
+        }
+    } catch (e) {
+        if (force) updateStatus(`Propagation error: ${e.message}`);
     }
 }
 
@@ -790,7 +797,7 @@ function updateSimulation() {
     // Time display
     const disp = document.getElementById('time-display');
     if (isLive()) {
-        disp.textContent = 'LIVE ' + simDate.toISOString().slice(11, 19) + 'Z';
+        disp.textContent = 'LIVE ' + simDate.toISOString().slice(11, 23) + 'Z';
         disp.classList.remove('scrubbed');
     } else {
         const offMin = scrubOffsetMs / 60000;
