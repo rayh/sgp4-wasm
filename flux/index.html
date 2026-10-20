@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>sgp4-wasm — Lifetime Particle Flux Exposure</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0e1a;
+            color: #e0e0e0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            line-height: 1.5;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        /* Top bar */
+        #top-bar {
+            height: 44px;
+            background: linear-gradient(135deg, #1a0d0d 0%, #2d1810 100%);
+            border-bottom: 1px solid rgba(255, 152, 0, 0.25);
+            display: flex; align-items: center; padding: 0 16px; gap: 10px;
+        }
+        #top-bar h1 { font-size: 14px; font-weight: 600; color: #ff9800; white-space: nowrap; }
+        #top-bar h1 a { color: inherit; text-decoration: none; }
+        .top-controls { display: flex; align-items: center; gap: 8px; flex: 1; }
+        #env-badge {
+            font-size: 10px; padding: 2px 8px; border-radius: 4px;
+            background: rgba(255,152,0,0.12); border: 1px solid rgba(255,152,0,0.3);
+            color: #ff9800; white-space: nowrap;
+        }
+        select, input {
+            background: #0a0e1a; border: 1px solid #1e293b; color: #e0e0e0;
+            padding: 4px 8px; border-radius: 5px; font-size: 11px;
+        }
+        select:focus, input:focus { outline: none; border-color: #ff9800; }
+        .btn {
+            background: rgba(255,152,0,0.1); border: 1px solid rgba(255,152,0,0.3);
+            color: #ff9800; padding: 4px 10px; border-radius: 5px; cursor: pointer;
+            font-size: 11px; white-space: nowrap;
+        }
+        .btn:hover { background: rgba(255,152,0,0.2); }
+        .btn.secondary { background: rgba(255,255,255,0.05); border-color: #1e293b; color: #90a4ae; }
+        .hint { font-size: 9px; color: #607d8b; }
+
+        /* Layout: left = 3D + altitude chart; right = mission config + risk */
+        #main-layout {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            grid-template-rows: auto 1fr auto auto;
+            height: calc(100vh - 44px);
+            gap: 0;
+        }
+        #viewport-container { grid-column: 1; grid-row: 1; position: relative; min-height: 280px; height: 42vh; }
+        #three-canvas { width: 100%; height: 100%; display: block; }
+        #viewport-overlay {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.65); padding: 6px 10px; border-radius: 6px;
+            font-size: 10px; pointer-events: none;
+        }
+        #viewport-overlay h3 { font-size: 11px; color: #ff9800; }
+        #viewport-hint {
+            position: absolute; bottom: 8px; left: 10px; font-size: 9px; color: #607d8b;
+        }
+
+        #alt-chart-section { grid-column: 1; grid-row: 2; padding: 8px 12px; border-top: 1px solid #1e293b; }
+        .chart-title { font-size: 10px; font-weight: 600; color: #ff9800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        canvas.chart { width: 100%; height: 170px; display: block; background: #0a0e1a; border-radius: 4px; }
+
+        #bottom-charts {
+            grid-column: 1; grid-row: 3;
+            display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;
+            padding: 8px 12px; border-top: 1px solid #1e293b;
+        }
+        canvas.chart-sm { width: 100%; height: 150px; display: block; background: #0a0e1a; border-radius: 4px; }
+
+        #ground-section { grid-column: 1; grid-row: 4; padding: 8px 12px; border-top: 1px solid #1e293b; }
+        canvas.chart-gt { width: 100%; height: 120px; display: block; background: #0a0e1a; border-radius: 4px; }
+
+        /* Right panel */
+        #right-panel {
+            grid-column: 2; grid-row: 1 / span 4;
+            border-left: 1px solid #1e293b; background: #0d1117;
+            overflow-y: auto; padding: 0;
+        }
+        .panel-section { padding: 12px 14px; border-bottom: 1px solid #1e293b; }
+        .panel-section h2 {
+            font-size: 10px; font-weight: 600; color: #ff9800;
+            text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;
+        }
+        .obj-line { font-size: 11px; margin-bottom: 3px; color: #90a4ae; display: flex; justify-content: space-between; }
+        .obj-line .obj-name { color: #fff; font-weight: 600; font-size: 12px; }
+        .obj-line .v { color: #e0e0e0; font-variant-numeric: tabular-nums; }
+        .cfg-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+        .cfg-row label { font-size: 10px; color: #607d8b; min-width: 88px; }
+        .cfg-row input[type="range"] { flex: 1; accent-color: #ff9800; }
+        .cfg-row .cfg-val { font-size: 11px; color: #e0e0e0; min-width: 60px; text-align: right; font-variant-numeric: tabular-nums; }
+        .cfg-row select { flex: 1; }
+
+        .risk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .risk-card {
+            background: rgba(255,255,255,0.02); border: 1px solid #1e293b; border-radius: 6px;
+            padding: 8px 10px;
+        }
+        .risk-card .rk-label { font-size: 9px; color: #607d8b; text-transform: uppercase; }
+        .risk-card .rk-value { font-size: 15px; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; }
+        .risk-card .rk-value.warn { color: #ff9800; }
+        .risk-card .rk-value.bad { color: #f44336; }
+        .risk-card .rk-sub { font-size: 9px; color: #607d8b; }
+        .band-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; font-size: 10px; }
+        .band-row .band-name { min-width: 64px; color: #90a4ae; }
+        .band-row .band-bar { flex: 1; height: 10px; background: #1e293b; border-radius: 3px; overflow: hidden; }
+        .band-row .band-fill { height: 100%; background: #ff9800; }
+        .band-row .band-pct { min-width: 42px; text-align: right; color: #e0e0e0; font-variant-numeric: tabular-nums; }
+        #status-text { font-size: 10px; color: #607d8b; padding: 8px 14px; }
+        .hl { color: #ff9800; font-weight: 600; }
+        .about p { font-size: 10px; color: #90a4ae; margin-bottom: 6px; }
+        .about a { color: #ff9800; text-decoration: none; }
+
+        #loading-overlay {
+            position: fixed; inset: 0; background: rgba(10,14,26,0.85);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 1000; font-size: 14px; color: #ff9800;
+        }
+        #loading-overlay.hidden { display: none; }
+
+        #tle-modal {
+            position: fixed; inset: 0; background: rgba(10,14,26,0.85); display: none;
+            align-items: center; justify-content: center; z-index: 200;
+        }
+    </style>
+</head>
+<body>
+    <div id="top-bar">
+        <h1>☢️ <a href="https://github.com/rayh/sgp4-wasm" target="_blank" rel="noopener">flux-exposure</a></h1>
+        <div class="top-controls">
+            <span id="env-badge">[model]</span>
+            <select id="object-select" style="width:200px"></select>
+            <button id="tle-toggle" class="btn secondary">Paste TLE</button>
+            <button id="import-master" class="btn secondary" title="Load MASTER .dia outputs (stays in your browser)">Import MASTER…</button>
+            <input type="file" id="master-file" accept=".dia,.json" multiple style="display:none">
+        </div>
+    </div>
+
+    <div id="main-layout">
+        <div id="viewport-container">
+            <canvas id="three-canvas"></canvas>
+            <div id="viewport-overlay">
+                <h3 id="viewport-title">Orbit & Flux Environment</h3>
+                <div id="viewport-info" style="color:#90a4ae">Select an object</div>
+            </div>
+            <div id="viewport-hint">drag to orbit · scroll to zoom · shell brightness = debris/meteoroid density</div>
+        </div>
+
+        <div id="alt-chart-section">
+            <div class="chart-title">Altitude & Flux along orbit</div>
+            <canvas id="alt-flux-chart" class="chart"></canvas>
+        </div>
+
+        <div id="bottom-charts">
+            <div>
+                <div class="chart-title">Cumulative fluence vs size</div>
+                <canvas id="fluence-chart" class="chart-sm"></canvas>
+            </div>
+            <div>
+                <div class="chart-title">P(≥1 impact) vs size</div>
+                <canvas id="risk-chart" class="chart-sm"></canvas>
+            </div>
+            <div>
+                <div class="chart-title">Environment heatmap (alt × inc)</div>
+                <canvas id="heatmap-canvas" class="chart-sm"></canvas>
+            </div>
+        </div>
+
+        <div id="ground-section">
+            <div class="chart-title">Ground track</div>
+            <canvas id="groundtrack-canvas" class="chart-gt"></canvas>
+        </div>
+
+        <div id="right-panel">
+            <div id="selected-section" class="panel-section">
+                <h2>Selected Object</h2>
+                <div id="selected-info"></div>
+            </div>
+            <div class="panel-section">
+                <h2>Mission</h2>
+                <div class="cfg-row">
+                    <label>Duration</label>
+                    <input type="range" id="cfg-duration" min="0.5" max="15" step="0.5" value="5">
+                    <span class="cfg-val" id="cfg-duration-val">5.0 yr</span>
+                </div>
+                <div class="cfg-row">
+                    <label>Exposed area</label>
+                    <input type="range" id="cfg-area" min="0.1" max="100" step="0.1" value="10">
+                    <span class="cfg-val" id="cfg-area-val">10 m²</span>
+                </div>
+                <div class="cfg-row">
+                    <label>Shield</label>
+                    <select id="cfg-material">
+                        <option value="aluminum" selected>Aluminum</option>
+                        <option value="kevlar">Kevlar</option>
+                        <option value="whipple">Whipple</option>
+                    </select>
+                </div>
+                <div class="cfg-row">
+                    <label>Thickness</label>
+                    <input type="range" id="cfg-shield" min="0.5" max="20" step="0.5" value="2">
+                    <span class="cfg-val" id="cfg-shield-val">2.0 mm</span>
+                </div>
+            </div>
+            <div class="panel-section">
+                <h2>Risk Summary</h2>
+                <div class="risk-grid" id="risk-grid">
+                    <div class="risk-card">
+                        <div class="rk-label">P(≥1 hit ≥1mm)</div>
+                        <div class="rk-value" id="rk-p1mm">—</div>
+                        <div class="rk-sub" id="rk-p1mm-sub">per mission</div>
+                    </div>
+                    <div class="risk-card">
+                        <div class="rk-label">Expected hits ≥1mm</div>
+                        <div class="rk-value" id="rk-exp1mm">—</div>
+                        <div class="rk-sub">full area</div>
+                    </div>
+                    <div class="risk-card">
+                        <div class="rk-label">P(perforation)</div>
+                        <div class="rk-value" id="rk-perf">—</div>
+                        <div class="rk-sub" id="rk-perf-sub">2mm Al wall</div>
+                    </div>
+                    <div class="risk-card">
+                        <div class="rk-label">Peak/min flux</div>
+                        <div class="rk-value" id="rk-ratio">—</div>
+                        <div class="rk-sub">perigee vs apogee</div>
+                    </div>
+                </div>
+                <div style="margin-top:10px">
+                    <div class="chart-title">Time in altitude bands</div>
+                    <div id="band-exposure"></div>
+                </div>
+            </div>
+            <div class="panel-section about">
+                <h2>Environment</h2>
+                <p id="env-info">Loading…</p>
+                <p>Impact risk assumes Poisson statistics. Perforation uses a modified
+                   Cour-Palais ballistic limit with an estimated mean impact velocity —
+                   indicative screening only, not a design analysis.</p>
+                <p>Environment source: see the badge in the header. The bundled default is a
+                   semi-empirical model built from published methodology (<a
+                   href="https://github.com/rayh/sgp4-wasm/blob/main/tools/flux-model/generate_model_data.py"
+                   target="_blank" rel="noopener">generator</a>). MASTER-derived data stays on your
+                   machine — import it via the header button.</p>
+            </div>
+            <div id="status-text"></div>
+        </div>
+    </div>
+
+    <div id="loading-overlay">⏳ Loading environment…</div>
+
+    <div id="tle-modal">
+        <div style="background:#111827;border:1px solid #1e293b;border-radius:12px;padding:24px;width:500px;max-width:90vw">
+            <h3 style="color:#ff9800;font-size:14px;margin-bottom:12px">Paste TLE</h3>
+            <textarea id="custom-tle" style="width:100%;height:80px;font-family:monospace;font-size:11px;background:#0a0e1a;border:1px solid #1e293b;color:#e0e0e0;padding:8px;border-radius:6px;resize:vertical" placeholder="Paste 2 or 3 line TLE here..."></textarea>
+            <div style="display:flex;gap:8px;margin-top:12px">
+                <button id="load-tle-btn" class="btn" style="flex:1">Load & Propagate</button>
+                <button id="tle-cancel" class="btn secondary" style="flex:0">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>

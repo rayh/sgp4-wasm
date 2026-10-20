@@ -14,3 +14,6 @@ pkg/
 
 # Python
 __pycache__/
+
+# MASTER-derived data (ESA licence — never publish)
+flux/data/local/

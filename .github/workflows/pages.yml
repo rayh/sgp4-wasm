@@ -50,8 +50,10 @@ jobs:
           fi
       - name: Stage site
         run: |
-          mkdir -p site/demo site/pkg
+          mkdir -p site/demo site/flux/data site/pkg
           cp -r demo/* site/demo/
+          cp -r flux/* site/flux/
+          rm -rf site/flux/data/local
           cp pkg/* site/pkg/
           # Root lands on the demo
           cat > site/index.html <<'HTML'

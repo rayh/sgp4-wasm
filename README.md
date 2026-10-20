@@ -66,7 +66,10 @@ sat.free();
 ## Demo
 
 **Hosted on GitHub Pages** — pushed automatically by CI on every change to
-`main`: https://rayh.github.io/sgp4-wasm/
+`main`:
+
+- **Live catalog** — https://rayh.github.io/sgp4-wasm/
+- **Flux exposure dashboard** — https://rayh.github.io/sgp4-wasm/flux/
 
 The demo shows the current satellite catalog (~15–20k objects from a bundled
 Celestrak snapshot, refreshed by CI) as a field of darts oriented along their
@@ -88,6 +91,19 @@ wasm-pack build --target web --release
 python3 -m http.server 8080
 # Open http://localhost:8080/demo/
 ```
+
+## Flux dashboard (`/flux/`)
+
+Lifetime particle-flux exposure for a single object: SGP4 propagation samples
+the orbit, the environment (flux ≥ sizes vs altitude/inclination) is integrated
+along the path, and the mission fluence drives Poisson impact probability and an
+indicative Cour-Palais perforation estimate for a user-configured shield.
+
+The bundled environment (`flux/data/`) is a semi-empirical model built from
+published methodology — see `tools/flux-model/generate_model_data.py`. MASTER
+results are supported but **never published** (ESA licence): regenerate locally
+with `tools/master-ingest/parse_master.py <dia-dir> flux/data/local/` (gitignored)
+or import `.dia` files directly in the dashboard UI.
 
 ## API
 
