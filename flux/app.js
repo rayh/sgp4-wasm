@@ -183,6 +183,7 @@ function recompute(reframe = false) {
 
 function redrawCharts() {
     if (!mission || !result) return;
+    resizeCanvases();
     drawAltFluxChart($('alt-flux-chart'), mission, config);
     drawFluenceChart($('fluence-chart'), result);
     drawRiskCurve($('risk-chart'), result, config);
@@ -190,6 +191,21 @@ function redrawCharts() {
     // marker at the first sample (propagation origin)
     drawGroundTrack($('groundtrack-canvas'), mission, result, mission.points[0]);
 }
+
+// Proportional sizing: the altitude chart fills its flexible grid row; the
+// ground track keeps a near-equirectangular proportion of its width.
+function resizeCanvases() {
+    const alt = $('alt-flux-chart');
+    const sec = alt.parentElement;
+    const titleH = sec.querySelector('.chart-title').offsetHeight + 14;
+    const avail = sec.clientHeight - titleH - 10;
+    alt.style.height = Math.max(avail, 120) + 'px';
+
+    const gt = $('groundtrack-canvas');
+    const gtW = gt.parentElement.clientWidth - 24;
+    gt.style.height = Math.min(Math.max(gtW * 0.32, 140), 240) + 'px';
+}
+window.addEventListener('resize', () => { if (mission) redrawCharts(); });
 
 function fmt(v, digits = 2) {
     if (!isFinite(v)) return '—';
